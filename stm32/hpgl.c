@@ -89,10 +89,44 @@ static void color()
 	}
 }
 
+
+static void line_start()
+{
+	usb_log_str("<polyline stroke=\"");
+
+	color();
+
+	usb_log_str("\" ");
+
+	switch (line_type) {
+	case 2:
+		usb_log_str("stroke-dasharray=\"10 10\" ");
+		break;
+	}
+
+	usb_log_str("points=\"");
+}
+
+static void line_end()
+{
+	usb_log_str("\" stroke-width=\"1\" fill=\"none\" />\n");
+}
+
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define CLAMP(x, a, b) (MIN(MAX(x, a), b))
 #define Y(y) CLAMP((560 - (y) * 2), 0, 560)
+
+static void pr_start()
+{
+	if (!pen_down) {
+		return;
+	}
+
+	line_start();
+
+	buf_ptr = buf;
+}
 
 static void pr()
 {
@@ -119,29 +153,51 @@ static void pr()
 	usb_log_str(" ");
 }
 
-static void pd_start()
+static void pr_end()
 {
-	if (pen_down) {
+	if (!pen_down) {
 		return;
 	}
 
-	usb_log_str("<polyline stroke=\"");
+	line_end();
+}
 
-	color();
-
-	usb_log_str("\" ");
-
-	switch (line_type) {
-	case 2:
-		usb_log_str("stroke-dasharray=\"10 10\" ");
-		break;
+static void pa()
+{
+	if (!pen_down) {
+		return;
 	}
 
-	usb_log_str("points=\"");
+	if (buf_ptr - buf <= 1 || (buf_ptr[-1] != ',' && buf_ptr[-1] != ';')) {
+		return;
+	}
 
+	buf_ptr[-1] = 0;
 	buf_ptr = buf;
 
+	int n = atoi(buf);
+
+	xy_state ^= 1;
+
+	if (xy_state == 1) {
+		x = n;
+		return;
+	}
+
+	y = n;
+
+	usb_log_str("<circle cx=\"");
+	usb_log_int(x);
+	usb_log_str("\" cy=\"");
+	usb_log_int(Y(y));
+	usb_log_str("\" r=\"1\" fill=\"black\" />\n");
+}
+
+static void pd_start()
+{
 	pen_down = 1;
+
+	buf_ptr = buf;
 }
 
 static void pd()
@@ -170,6 +226,7 @@ static void pd()
 		old_y = y;
 		y = n;
 
+		line_start();
 		usb_log_int(old_x);
 		usb_log_str(",");
 		usb_log_int(Y(old_y));
@@ -177,18 +234,8 @@ static void pd()
 		usb_log_int(x);
 		usb_log_str(",");
 		usb_log_int(Y(y));
+		line_end();
 	}
-}
-
-static void pu_start()
-{
-	if (!pen_down) {
-		return;
-	}
-
-	usb_log_str("\" stroke-width=\"1\" fill=\"none\" />\n");
-
-	pen_down = 0;
 }
 
 static void pu()
@@ -209,6 +256,8 @@ static void pu()
 	} else {
 		y = n;
 	}
+
+	pen_down = 0;
 }
 
 static void lb()
@@ -256,9 +305,10 @@ static struct cmd {
 	void (*end)();
 } cmds [] = {
 	{"SP", sp, 0, 0},
-	{"PR", pr, 0, 0},
+	{"PR", pr, pr_start, pr_end},
+	{"PA", pa, 0, 0},
 	{"PD", pd, pd_start, 0},
-	{"PU", pu, pu_start, 0},
+	{"PU", pu, 0, 0},
 	{"LB", lb, lb_start, lb_end},
 	{"LT", lt, 0, 0}
 };

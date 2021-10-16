@@ -8,3 +8,5 @@ converts it to SVG format. The SVG data is transmitted to dsoctl over USB.
 ![img1](imgs/1.png)
 
 ![img2](imgs/2.png)
+
+![img3](imgs/3.png)
